@@ -6,8 +6,8 @@ use std::io::Write;
 use std::path::{Display, Path, PathBuf};
 use std::{fs, io};
 
-use fs2::FileExt;
 use fs2;
+use fs2::FileExt;
 
 #[derive(PartialEq)]
 enum State {
@@ -107,15 +107,14 @@ impl Filesystem {
 
         match state {
             State::Exclusive => {
-                acquire(
-                    msg,
-                    &path,
-                    &|| f.try_lock_exclusive(),
-                    &|| f.lock_exclusive(),
-                )?;
+                acquire(msg, &path, &|| f.try_lock_exclusive(), &|| {
+                    f.lock_exclusive()
+                })?;
             }
             State::Shared => {
-                acquire(msg, &path, &|| f.try_lock_shared(), &|| f.lock_shared())?;
+                acquire(msg, &path, &|| Ok(f.try_lock_shared()?), &|| {
+                    f.lock_shared()
+                })?;
             }
         }
 
@@ -125,7 +124,7 @@ impl Filesystem {
         })
     }
 
-    pub fn display(&self) -> Display {
+    pub fn display(&self) -> Display<'_> {
         self.path.display()
     }
 }
@@ -173,13 +172,12 @@ fn acquire(
     match try() {
         Ok(_) => return Ok(()),
         #[cfg(target_os = "macos")]
-        Err(ref e) if e.raw_os_error() == Some(::libc::ENOTSUP) =>
-        {
-            return Ok(())
+        Err(ref e) if e.raw_os_error() == Some(::libc::ENOTSUP) => return Ok(()),
+        Err(e) => {
+            if e.raw_os_error() != fs2::lock_contended_error().raw_os_error() {
+                return Err(e);
+            }
         }
-        Err(e) => if e.raw_os_error() != fs2::lock_contended_error().raw_os_error() {
-            return Err(e);
-        },
     }
 
     writeln!(
@@ -187,7 +185,8 @@ fn acquire(
         "{:>12} waiting for file lock on {}",
         "Blocking",
         msg
-    ).ok();
+    )
+    .ok();
 
     block()
 }
