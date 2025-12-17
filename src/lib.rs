@@ -1,5 +1,4 @@
 #![deny(warnings)]
-#![feature(file_lock)]
 
 #[macro_use]
 extern crate error_chain;
