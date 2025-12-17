@@ -28,3 +28,6 @@ parking_lot = "0.12"
 
 [features]
 backtrace = ["error-chain/backtrace"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(has_error_description_deprecated)'] }
